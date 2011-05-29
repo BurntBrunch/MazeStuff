@@ -1,0 +1,401 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>Maze test</title>
+    </head>
+    <body>
+        <div id="container" style="margin-left: auto; margin-right: auto; width:600px; height: 400px"></div>
+        
+        <input type="button" value="Show cell outlines" onclick="addCells()"><br>
+        
+        <pre id="debug"></pre>
+        <script type="text/javascript" src="../three.js/build/Three.js"></script>
+        <script type="text/javascript" src="../three.js/examples/js/Tween.js"></script>
+        <script type="text/javascript">
+            
+            Object.prototype.getType = function() { 
+                var funcNameRegex = /function (.{1,})\(/;
+                var results = (funcNameRegex).exec((this).constructor.toString());
+                return (results && results.length > 1) ? results[1] : "";
+            };
+            
+            function debug(str)
+            {
+                document.getElementById("debug").innerHTML += str + "\n";
+            }
+            
+        	var gameGrid = new Array(SIDE);
+        	var SIDE = 4;
+
+        	var Dir = {XNEG: 0, XPOS: 1, YNEG: 2, YPOS: 3,
+        		ZNEG: 4, ZPOS: 5};
+        	
+        	function GridCell(x,y,z)
+        	{
+        		this.x = x;
+        		this.y = y;
+        		this.z = z;
+        		this.walls = []
+        	}
+        	
+        	function PathCell(x,y,z,visited, dir)
+        	{
+        	    GridCell.call(this, x,y,z);
+        	    this.visited = visited;
+        	    this.nextDir = dir ? dir : Dir.ZPOS;
+        	}
+        	
+        	function initGrid()
+        	{
+        		for(var x=0; x< SIDE; x++)
+        		{
+        			var row = new Array(SIDE);
+        			for(var y=0; y< SIDE; y++)
+        			{
+        				var column = new Array(SIDE);
+        				for(var z=0; z< SIDE; z++)
+        				{
+        					column[z] = new GridCell(x,y,z,false);
+        				}
+        				row[y] = column;
+        			}
+        			gameGrid[x] = row;
+        		}
+        	}
+        	
+        	function isVisited(x,y,z)
+        	{
+        		return gameGrid[x][y][z].visited;
+        	}
+
+            function getCell(x,y,z)
+            {
+                return gameGrid[x][y][z];
+            }
+        	
+        	// Returns [ [Cell, Dir from params], [Cell, Dir from params] ... ]
+        	function getNeighbours(x,y,z)
+        	{
+        		var ret = [];
+                var dx = -1;
+                
+    			if(x+dx >= 0 && x+dx < SIDE)
+    				ret.push([new PathCell(x+dx,y,z,false), Dir.XNEG]);
+    			
+    			if(y+dx >= 0 && y+dx < SIDE)
+    				ret.push([new PathCell(x,y+dx,z,false), Dir.YNEG]);
+    				
+    			if(z+dx >= 0 && z+dx < SIDE)
+    				ret.push([new PathCell(x,y,z+dx,false), Dir.ZNEG]);
+    			
+    			dx = 1;
+    			
+    			if(x+dx >= 0 && x+dx < SIDE)
+    				ret.push([new PathCell(x+dx,y,z,false), Dir.XPOS]);
+    			
+    			if(y+dx >= 0 && y+dx < SIDE)
+    				ret.push([new PathCell(x,y+dx,z,false), Dir.YPOS]);
+    				
+    			if(z+dx >= 0 && z+dx < SIDE)
+    				ret.push([new PathCell(x,y,z+dx,false), Dir.ZPOS]);
+    				
+        		return ret;
+        	}
+        	
+        	function isVisited(item, stack)
+        	{
+        	    for(var i=0; i < stack.length; i++)
+    			{
+    			    var vis = stack[i];
+    			    if (item.x == vis.x && item.y == vis.y &&
+    			        item.z == vis.z)
+    			        return true;
+    			}
+    			return false
+            }
+            
+        	function getUnvisitedNeighbours(x,y,z, stack)
+        	{
+        		return getNeighbours(x,y,z).filter(function(elem, idx, arr){
+        		    var item = elem[0];
+        			return !isVisited(item, stack);
+        		});
+        	}
+
+            function getArrayString(arr)
+            {
+                var str = "";
+        	    for(var i=0; i<arr.length; i++)
+            	{
+            		str += "" + arr[i].x + ", " + arr[i].y + ", " + arr[i].z + ": " + arr[i].visited + "\n";
+            	}
+                return str;
+            }
+
+			function randomizedDepthFirst()
+			{
+                var path = [];
+			    var stack = [];
+                stack.push(getCell(0,0,0));
+
+                while(stack.length > 0)
+                {
+                    var item = stack.pop();
+                    
+                    if(isVisited(item, path)) continue; 
+                    path.push(item);
+
+                    var neighbours = getUnvisitedNeighbours(item.x, item.y, item.z, path);
+                    
+                    if(neighbours.length > 0)
+                    {
+                        var firstIdx = Math.floor(Math.random()*neighbours.length);
+                        var first = neighbours[firstIdx];
+                        
+                        for(var i = 0; i < neighbours.length; i++)
+                        {
+                            var neighbour = neighbours[i];
+                            if(i != firstIdx && !isVisited(neighbour, path))
+                                stack.push(neighbour[0]);
+                        }
+                        
+                        path[path.length-1].nextDir = first[1];
+                        stack.push(first[0]);
+                    }
+                }
+
+                return path;
+			}
+        </script>
+        <script type="text/javascript"> 
+            
+            var CUBE_SIDE = 500, CELL_SIDE = CUBE_SIDE/SIDE;
+            var statsEnabled = false;
+ 
+            var container, stats;
+ 
+            var camera, scene, renderer;
+ 
+            var cross;
+            
+            var elements = [];
+            var cells = [];
+            
+            var toggleCellsFlag = false;
+ 
+            init();
+            
+            initGrid();
+        	
+        	debug("Generated path");
+        	
+        	addElements();
+        	
+        	var debugCamera = function(){
+        	    debug("Target " + camera.target.position.x + ", " +
+        	            camera.target.position.y + ", " +
+        	            camera.target.position.z);
+        	    
+        	    setTimeout(debugCamera, 2500);
+        	}
+        	
+        	//setTimeout(debugCamera, 1000);
+            
+            function getCenterCoords(x, y, z)
+            {
+                return {x: (x*CELL_SIDE + CELL_SIDE/2),
+                        y: (y*CELL_SIDE + CELL_SIDE/2),
+                        z: (z*CELL_SIDE + CELL_SIDE/2)}
+            }
+            
+            function getDirectedCoords(elem)
+            {
+                var step = CELL_SIDE/4;
+                
+                var center = getCenterCoords(elem.x, elem.y, elem.z);
+                switch(elem.nextDir)
+                {
+                    case Dir.XPOS: center.x += step; break;
+                    case Dir.XNEG: center.x -= step; break;
+                    case Dir.YPOS: center.y += step; break;
+                    case Dir.YNEG: center.y -= step; break;
+                    case Dir.ZPOS: center.z += step; break;
+                    case Dir.ZNEG: center.z -= step; break;
+                }
+                
+                return center
+            }
+            
+            function newPathElement(color, coords)
+            {
+                var material =  new THREE.MeshPhongMaterial( 
+                    { color: color ? color : 0, 
+                      opacity: 0.80,
+                      wireframe: false,
+                      reflectivity: 0.4 } );
+ 
+                var mesh = new THREE.Mesh( new THREE.Cube( 
+                                                CELL_SIDE/2, 
+                                                CELL_SIDE/2, 
+                                                CELL_SIDE/2 ), 
+                    material );
+                mesh.position.set(coords.x, coords.y, coords.z);
+                coords
+                return mesh
+            }
+            
+            function newCellElement(coords)
+            {
+                var material =  new THREE.MeshPhongMaterial( 
+                    { color: 0, 
+                      opacity: 0.10,
+                      wireframe: true,
+                      reflectivity: 0.1 } );
+ 
+                var mesh = new THREE.Mesh( new THREE.Cube( 
+                                                CELL_SIDE, 
+                                                CELL_SIDE, 
+                                                CELL_SIDE ), 
+                    material );
+                mesh.position.set(coords.x, coords.y, coords.z);
+                
+                return mesh
+            }
+            
+            function addCells()
+            {
+                if(cells.length == 0)
+                {
+                    for (var x=0; x < SIDE; x++)
+                    {
+                        for (var y=0; y < SIDE; y++)
+                        {
+                            for (var z=0; z < SIDE; z++)
+                            {
+                                var elem = newCellElement(getCenterCoords(x,y,z));
+                                elem.children = [];
+                                scene.addChild(elem);
+                                cells.push(elem);
+                            }
+                        }
+                    }
+                }
+                
+            }
+            
+            function addElements()
+            {
+                var elems = randomizedDepthFirst();
+                var step = 256 / elems.length;
+                
+                for(var i=0; i < elems.length; i++)
+                {
+                    var elem = elems[i];
+                    
+                    debug(elem.x + ", " + elem.y + ", " + elem.z);
+                    
+                    var col = (step*i << 16) + (step*i << 8) + step*i;
+                    var coords = getDirectedCoords(elem);
+                    
+                    var elemPath = newPathElement(col, coords);
+                                            
+                    elements[i] = elemPath;
+                    scene.addChild(elemPath);
+                }
+            }
+            
+ 
+            function init()
+            {
+                // scene and camera
+                scene = new THREE.Scene();
+                scene.fog = new THREE.FogExp2( 0xffffff, 0.4/CUBE_SIDE );      
+                
+                container = document.getElementById( 'container' );
+                 
+                camera = new THREE.QuakeCamera( 
+                    {fov: 80, 
+                     aspect: container.clientWidth/container.clientHeight, 
+                     near: 0.001, 
+                     far: 200*CUBE_SIDE,
+                     
+                     movementSpeed: CUBE_SIDE,
+                     lookSpeed: 0.2,
+                     heightSpeed: true,
+                     heightCoef: 0.2,
+                     
+                     });
+                
+                camera.position.x = -0.5*CUBE_SIDE;
+                camera.position.y = 0.5*CUBE_SIDE;
+                camera.position.z = 0.5*CUBE_SIDE;
+                
+                camera.update();
+                // world
+                
+                var material =  new THREE.MeshPhongMaterial( 
+                    { color:0x000000, 
+                      opacity: 0.50,
+                      wireframe: true,
+                      reflectivity: 0.4 } );
+ 
+                var mesh = new THREE.Mesh( new THREE.Cube( 
+                                                CUBE_SIDE, 
+                                                CUBE_SIDE, 
+                                                CUBE_SIDE ),
+                                material );
+                                
+                mesh.position.set(CUBE_SIDE/2,CUBE_SIDE/2,CUBE_SIDE/2);
+                scene.addChild( mesh );
+               
+                // lights               
+ 
+                light = new THREE.DirectionalLight( 0xffffff );
+                light.position.set( 2*CUBE_SIDE, 2*CUBE_SIDE, 2*CUBE_SIDE );
+                light.lookAt(0,0,0);
+                scene.addChild( light );
+                
+                light = new THREE.DirectionalLight( 0xffffff );
+                light.position.set( -2*CUBE_SIDE, -2*CUBE_SIDE, -2*CUBE_SIDE );
+                light.lookAt(0,0,0);
+                scene.addChild( light );
+ 
+                light = new THREE.AmbientLight( 0x222222 );
+                scene.addChild( light );
+ 
+                //scene.addChild( camera );
+                // renderer
+ 
+                renderer = new THREE.WebGLRenderer( { antialias: false } );
+                renderer.setClearColorHex( 0xffffff, 1 );
+                renderer.setSize( container.clientWidth, container.clientHeight );
+ 
+                container.appendChild( renderer.domElement );
+ 
+                if ( statsEnabled ) {
+ 
+                    stats = new Stats();
+                    stats.domElement.style.position = 'absolute';
+                    stats.domElement.style.top = '0px';
+                    stats.domElement.style.zIndex = 100;
+                    container.appendChild( stats.domElement );
+ 
+                }
+ 
+                setInterval( loop, 1000 / 60 );
+
+            }
+ 
+ 
+            function loop() {
+                renderer.render( scene, camera );
+ 
+                if ( statsEnabled ) stats.update();
+            }
+ 
+ 
+        </script> 
+    </body>
+</html>
